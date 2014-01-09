@@ -1,13 +1,15 @@
-Vagrant.require_plugin "vagrant-berkshelf"
-Vagrant.require_plugin "vagrant-chef-zero"
+Vagrant.require_version ">= 1.1"
+
+#Vagrant.require_plugin "vagrant-berkshelf"
+#Vagrant.require_plugin "vagrant-chef-zero"
 Vagrant.require_plugin "vagrant-omnibus"
 
 Vagrant.configure("2") do |config|
   # Berkshelf plugin configuration
-  config.berkshelf.enabled = true
+  config.berkshelf.enabled = false
 
   # Chef-Zero plugin configuration
-  config.chef_zero.enabled = true
+  config.chef_zero.enabled = false
   config.chef_zero.chef_repo_path = "."
 
   # Omnibus plugin configuration
@@ -22,6 +24,10 @@ Vagrant.configure("2") do |config|
   # OpenStack-related settings
   config.vm.network "private_network", ip: "33.33.33.60"
   config.vm.network "private_network", ip: "192.168.100.60"
+  chef_environment = "vagrant"
+  chef_run_list = [ "role[allinone-compute]" ]
+
+  # virtualbox provider settings
   config.vm.provider "virtualbox" do |vb|
     vb.customize ["modifyvm", :id, "--cpus", 2]
     vb.customize ["modifyvm", :id, "--memory", 2048]
@@ -29,8 +35,50 @@ Vagrant.configure("2") do |config|
     vb.customize ["modifyvm", :id, "--nicpromisc3", "allow-all"]
   end
 
-  chef_environment = "vagrant"
-  chef_run_list = [ "role[allinone-compute]" ]
+  # rackspace provider settings (personal settings like api_key are in ~/.vagrant.d/Vagrantfile)
+  config.vm.provider :rackspace do |rs|
+    rs.disk_config     = "MANUAL"
+  end
+
+# Ubuntu 12.04 ON RACKSPACE CLOUD config
+  config.vm.define :rsubun  do |rsubun|
+    rsubun.vm.hostname = "rsubun"
+    rsubun.vm.box = "dummy"
+    rsubun.vm.box_url = "https://github.com/mitchellh/vagrant-rackspace/raw/master/dummy.box"
+    rsubun.vm.provision :chef_client do |chef|
+      chef.environment            = chef_environment
+      chef.run_list               = chef_run_list.unshift("recipe[apt::cacher-client]")
+      chef.chef_server_url        = "https://162.13.94.31:443/"
+      chef.validation_client_name = "chef-validator"
+      chef.validation_key_path    = "~/.chef/chef-validator.pem"
+      chef.delete_node            = true
+      chef.delete_client          = true
+    end
+    rsubun.vm.provider :rackspace do |rs|
+      rs.flavor        = /8GB/
+      rs.image         = /Precise Pangolin/
+    end
+  end
+
+# CentOS 6.4 ON RACKSPACE CLOUD config
+  config.vm.define :rscent  do |rscent|
+    rscent.ssh.pty = true
+    rscent.vm.hostname = "rscent"
+    rscent.vm.box = "dummy"
+    rscent.vm.box_url = "https://github.com/mitchellh/vagrant-rackspace/raw/master/dummy.box"
+    rscent.vm.provision :chef_client do |chef|
+      chef.environment            = chef_environment
+      chef.chef_server_url        = "https://162.13.94.31:443/"
+      chef.validation_client_name = "chef-validator"
+      chef.validation_key_path    = "~/.chef/chef-validator.pem"
+      chef.delete_node            = true
+      chef.delete_client          = true
+    end
+    rscent.vm.provider :rackspace do |rs|
+      rs.flavor            = /8 GB Performance/
+      rs.image             = /CentOS 6\.4/
+    end
+  end
 
   # Ubuntu 12.04 Config
   config.vm.define :ubuntu1204 do |ubuntu1204|
@@ -45,6 +93,7 @@ Vagrant.configure("2") do |config|
 
 # Centos 6.4 Config
   config.vm.define :centos64 do |centos64|
+    centos64.ssh.pty = true
     centos64.vm.hostname = "centos64"
     centos64.vm.box = "opscode-centos-6.4"
     centos64.vm.box_url = "https://opscode-vm-bento.s3.amazonaws.com/vagrant/opscode_centos-6.4_provisionerless.box"
